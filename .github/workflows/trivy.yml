@@ -19,7 +19,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # Scans the repository filesystem for:
       # - Known CVEs in detected packages/binaries
@@ -27,7 +27,7 @@ jobs:
       # - Misconfigured YAML/JSON/plist files
       # Results are uploaded to the repo's Security → Code scanning tab.
       - name: Run Trivy
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: fs
           scan-ref: .
@@ -36,7 +36,7 @@ jobs:
           severity: CRITICAL,HIGH,MEDIUM
 
       - name: Upload results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: trivy-results.sarif
