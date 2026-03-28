@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install xcodegen
         run: brew install --quiet xcodegen
@@ -40,7 +40,7 @@ jobs:
       # CODECOV_TOKEN must be added as a repository secret.
       # Get a token at https://app.codecov.io after connecting the repo.
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           xcode: true
           xcode_archive_path: TestResults.xcresult
