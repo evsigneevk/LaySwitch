@@ -1,0 +1,48 @@
+name: LaySwitch
+options:
+  bundleIdPrefix: com.layswitch
+  deploymentTarget:
+    macOS: "15.0"
+  defaultConfig: Debug
+  xcodeVersion: "16"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    ENABLE_HARDENED_RUNTIME: YES
+    CODE_SIGN_STYLE: Automatic
+    PRODUCT_BUNDLE_IDENTIFIER: com.layswitch.app
+
+targets:
+  LaySwitch:
+    type: application
+    platform: macOS
+    sources:
+      - path: LaySwitch
+    info:
+      path: LaySwitch/App/Info.plist
+      properties:
+        LSUIElement: true
+        NSPrincipalClass: NSApplication
+        LSMinimumSystemVersion: "15.0"
+    settings:
+      base:
+        PRODUCT_NAME: LaySwitch
+        INFOPLIST_FILE: LaySwitch/App/Info.plist
+        LD_RUNPATH_SEARCH_PATHS: $(inherited) @executable_path/../Frameworks
+    dependencies:
+      - sdk: Carbon.framework
+      - sdk: ServiceManagement.framework
+
+  LaySwitchTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: LaySwitchTests
+    dependencies:
+      - target: LaySwitch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.layswitch.tests

@@ -1,0 +1,43 @@
+name: Security Scan
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'LaySwitch/**'
+      - 'LaySwitchTests/**'
+      - 'project.yml'
+
+jobs:
+  trivy:
+    name: Trivy Vulnerability & Secret Scan
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Scans the repository filesystem for:
+      # - Known CVEs in detected packages/binaries
+      # - Hardcoded secrets and credentials in source files
+      # - Misconfigured YAML/JSON/plist files
+      # Results are uploaded to the repo's Security → Code scanning tab.
+      - name: Run Trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH,MEDIUM
+
+      - name: Upload results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy

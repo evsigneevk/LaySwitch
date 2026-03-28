@@ -1,0 +1,48 @@
+name: Tests
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'LaySwitch/**'
+      - 'LaySwitchTests/**'
+      - 'project.yml'
+
+jobs:
+  test:
+    name: Unit Tests & Coverage
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install xcodegen
+        run: brew install --quiet xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Run tests with coverage
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project LaySwitch.xcodeproj \
+            -scheme LaySwitchTests \
+            -destination 'platform=macOS,arch=arm64' \
+            -enableCodeCoverage YES \
+            -resultBundlePath TestResults.xcresult \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ENABLE_HARDENED_RUNTIME=NO
+
+      # CODECOV_TOKEN must be added as a repository secret.
+      # Get a token at https://app.codecov.io after connecting the repo.
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          xcode: true
+          xcode_archive_path: TestResults.xcresult
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
