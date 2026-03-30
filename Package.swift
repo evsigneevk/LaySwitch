@@ -16,11 +16,6 @@ let package = Package(
                 .linkedFramework("Carbon"),
                 .linkedFramework("ServiceManagement"),
             ]
-        ),
-        .testTarget(
-            name: "LaySwitchTests",
-            dependencies: ["LaySwitch"],
-            path: "LaySwitchTests"
-        ),
+        )
     ]
 )

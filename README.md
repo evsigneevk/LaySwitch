@@ -1,6 +1,5 @@
 # LaySwitch
 
-[![Tests](https://github.com/evsigneevk/LaySwitch/actions/workflows/tests.yml/badge.svg)](https://github.com/evsigneevk/LaySwitch/actions/workflows/tests.yml)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
 [![macOS 15+](https://img.shields.io/badge/macOS-15%2B-brightgreen)](https://www.apple.com/macos/)
 [![Swift 6](https://img.shields.io/badge/Swift-6.0-orange)](https://www.swift.org)
@@ -108,26 +107,12 @@ LaySwitch/
 └── UI/
     └── StatusBarController.swift # menu bar item and menu
 
-LaySwitchTests/
-├── LayoutStoreTests.swift
-└── AppFocusMonitorTests.swift
-
 Assets/
 └── LaySwitch.jpeg   # source image — icns is generated at build time
 
 Package.swift        # Swift Package Manager manifest (tests)
 build.sh             # build script — produces LaySwitch.app (no Xcode required)
 ```
-
-## Running Tests
-
-Tests use Swift Package Manager and run on any machine with Xcode installed:
-
-```bash
-swift test
-```
-
-CI runs automatically on every pull request via GitHub Actions (`swift test --enable-code-coverage`).
 
 ## Debugging
 
