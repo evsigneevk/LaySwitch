@@ -74,7 +74,7 @@ final class AppFocusMonitorTests: XCTestCase {
     private var store: MockLayoutStore!
     private var monitor: AppFocusMonitor!
 
-    override func setUp() {
+    override func setUp() async throws {
         inputSource = MockInputSourceManager()
         store = MockLayoutStore()
         monitor = AppFocusMonitor(
@@ -83,7 +83,7 @@ final class AppFocusMonitorTests: XCTestCase {
         )
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         monitor.stop()
     }
 
