@@ -95,7 +95,7 @@ Input source switching uses the Carbon **Text Input Services** (TIS) API — the
 ```
 LaySwitch/
 ├── App/
-│   ├── AppDelegate.swift       # entry point, owns all components
+│   ├── AppDelegate.swift       # @main entry point, owns all components
 │   └── Info.plist              # LSUIElement = YES (no Dock icon)
 ├── InputSource/
 │   └── InputSourceManager.swift  # TIS API wrapper
@@ -115,9 +115,19 @@ LaySwitchTests/
 Assets/
 └── LaySwitch.jpeg   # source image — icns is generated at build time
 
-build.sh             # build script (no Xcode required)
-project.yml          # xcodegen config (optional, for Xcode users)
+Package.swift        # Swift Package Manager manifest (tests)
+build.sh             # build script — produces LaySwitch.app (no Xcode required)
 ```
+
+## Running Tests
+
+Tests use Swift Package Manager and run on any machine with Xcode installed:
+
+```bash
+swift test
+```
+
+CI runs automatically on every pull request via GitHub Actions (`swift test --enable-code-coverage`).
 
 ## Debugging
 

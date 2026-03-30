@@ -171,7 +171,7 @@ final class AppFocusMonitorTests: XCTestCase {
     /// the system still reports the old layout ("RussianWin"), then the real
     /// restore TIS fires ("US"). The stray must be suppressed and must not
     /// corrupt the stored layout.
-    func test_spaceTransition_strayTIS_doesNotCorruptSavedLayout() async throws {
+    func test_spaceTransition_strayTIS_doesNotCorruptSavedLayout() {
         let testBundleID = NSRunningApplication.current.bundleIdentifier ?? ""
         guard !testBundleID.isEmpty else { return }
 
@@ -203,9 +203,8 @@ final class AppFocusMonitorTests: XCTestCase {
             object: nil
         )
 
-        // Drain run loop for any Case-A async dispatch.
-        await Task.yield()
-        try await Task.sleep(nanoseconds: 10_000_000)
+        // Drain run loop for the DispatchQueue.main.async in Case A.
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
 
         let wrongSave = store.savedPairs.contains {
             $0.bundleID == testBundleID && $0.sourceID == "com.apple.keylayout.RussianWin"

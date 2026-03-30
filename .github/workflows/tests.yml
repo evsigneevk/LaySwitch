@@ -6,7 +6,7 @@ on:
     paths:
       - 'LaySwitch/**'
       - 'LaySwitchTests/**'
-      - 'project.yml'
+      - 'Package.swift'
 
 jobs:
   test:
@@ -17,32 +17,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Install xcodegen
-        run: brew install --quiet xcodegen
+      - name: Run tests
+        run: swift test --enable-code-coverage
 
-      - name: Generate Xcode project
-        run: xcodegen generate
-
-      - name: Run tests with coverage
+      - name: Export LCOV coverage
         run: |
-          set -o pipefail
-          xcodebuild test \
-            -project LaySwitch.xcodeproj \
-            -scheme LaySwitchTests \
-            -destination 'platform=macOS,arch=arm64' \
-            -enableCodeCoverage YES \
-            -resultBundlePath TestResults.xcresult \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            ENABLE_HARDENED_RUNTIME=NO
+          BIN_PATH=$(swift build --show-bin-path)
+          PROFDATA=$(find "$BIN_PATH/codecov" -name "*.profdata" | head -1)
+          XCTEST=$(find "$BIN_PATH" -maxdepth 1 -name "*.xctest" | head -1)
+          TEST_NAME=$(basename "$XCTEST" .xctest)
+          xcrun llvm-cov export \
+            "$XCTEST/Contents/MacOS/$TEST_NAME" \
+            -instr-profile "$PROFDATA" \
+            -ignore-filename-regex '\.build|Tests' \
+            -format lcov \
+            > coverage.lcov
 
-      # CODECOV_TOKEN must be added as a repository secret.
-      # Get a token at https://app.codecov.io after connecting the repo.
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6
         with:
-          xcode: true
-          xcode_archive_path: TestResults.xcresult
+          files: coverage.lcov
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false

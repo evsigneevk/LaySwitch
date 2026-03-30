@@ -94,8 +94,13 @@ final class AppFocusMonitor {
             object: nil,
             queue: .main
         ) { [weak self] notification in
+            // Extract NSRunningApplication before crossing into MainActor isolation.
+            // Notification (struct with non-Sendable userInfo) cannot cross actor
+            // boundaries in Swift 6; NSRunningApplication is @unchecked Sendable.
+            let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                as? NSRunningApplication
             MainActor.assumeIsolated {
-                self?.handleActivation(notification)
+                self?.handleActivation(app)
             }
         }
     }
@@ -179,10 +184,9 @@ final class AppFocusMonitor {
 
     /// Called when a different app becomes frontmost.
     /// Restores the saved layout for the newly active app.
-    private func handleActivation(_ notification: Notification) {
+    private func handleActivation(_ app: NSRunningApplication?) {
         guard
-            let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
-                as? NSRunningApplication,
+            let app,
             let newBundleID = app.bundleIdentifier
         else { return }
 
