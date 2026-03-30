@@ -125,17 +125,23 @@ final class AppFocusMonitorTests: XCTestCase {
     }
 
     func test_firstSwitch_savesCurrentSourceForPreviousApp() {
-        // Seed previousBundleID via start() — it will pick up the real
-        // frontmost app. We then post an activation for the test process.
-        monitor.start()
+        // start() seeds confirmedFrontmostBundleID from NSWorkspace.
+        // Requires a real frontmost app — skip if running headless.
+        guard NSWorkspace.shared.frontmostApplication != nil else { return }
 
+        monitor.start()
         inputSource.stubbedSourceID = "com.apple.keylayout.Russian"
 
-        let note = activationNotification(bundleID: NSRunningApplication.current.bundleIdentifier ?? "")
-        NSWorkspace.shared.notificationCenter.post(note)
+        // Post a TIS notification directly — simulates the user having typed
+        // in Russian in the previously frontmost app.
+        DistributedNotificationCenter.default().post(
+            name: NSNotification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
+            object: nil
+        )
 
-        // The monitor should have saved the Russian layout for whatever
-        // app was previously frontmost (seeded in start()).
+        // Drain run loop for the Case A async dispatch in handleInputSourceChange.
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+
         XCTAssertFalse(store.savedPairs.isEmpty, "Expected at least one save")
         XCTAssertEqual(store.savedPairs.first?.sourceID, "com.apple.keylayout.Russian")
     }
