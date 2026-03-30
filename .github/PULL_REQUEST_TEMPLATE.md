@@ -12,7 +12,6 @@
 
 ## Checklist
 
-- [ ] Tests pass locally (`xcodegen generate && xcodebuild test -project LaySwitch.xcodeproj -scheme LaySwitchTests -destination 'platform=macOS'`)
 - [ ] New behaviour is covered by tests (if applicable)
 - [ ] No hardcoded strings, credentials, or personal paths
 

@@ -1,6 +1,5 @@
 # LaySwitch
 
-[![Tests](https://github.com/evsigneevk/LaySwitch/actions/workflows/tests.yml/badge.svg)](https://github.com/evsigneevk/LaySwitch/actions/workflows/tests.yml)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
 [![macOS 15+](https://img.shields.io/badge/macOS-15%2B-brightgreen)](https://www.apple.com/macos/)
 [![Swift 6](https://img.shields.io/badge/Swift-6.0-orange)](https://www.swift.org)
@@ -95,7 +94,7 @@ Input source switching uses the Carbon **Text Input Services** (TIS) API — the
 ```
 LaySwitch/
 ├── App/
-│   ├── AppDelegate.swift       # entry point, owns all components
+│   ├── AppDelegate.swift       # @main entry point, owns all components
 │   └── Info.plist              # LSUIElement = YES (no Dock icon)
 ├── InputSource/
 │   └── InputSourceManager.swift  # TIS API wrapper
@@ -108,15 +107,11 @@ LaySwitch/
 └── UI/
     └── StatusBarController.swift # menu bar item and menu
 
-LaySwitchTests/
-├── LayoutStoreTests.swift
-└── AppFocusMonitorTests.swift
-
 Assets/
 └── LaySwitch.jpeg   # source image — icns is generated at build time
 
-build.sh             # build script (no Xcode required)
-project.yml          # xcodegen config (optional, for Xcode users)
+Package.swift        # Swift Package Manager manifest (tests)
+build.sh             # build script — produces LaySwitch.app (no Xcode required)
 ```
 
 ## Debugging

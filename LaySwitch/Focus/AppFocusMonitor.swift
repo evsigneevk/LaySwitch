@@ -1,187 +1,142 @@
 import AppKit
-import Carbon.HIToolbox
 import OSLog
 
 private let log = Logger(subsystem: "com.layswitch.app", category: "FocusMonitor")
 
-/// Monitors input source and application activation events.
+/// Monitors application focus changes to save and restore keyboard layouts.
 ///
-/// Two complementary mechanisms keep the store up to date:
-///
-/// 1. `kTISNotifySelectedKeyboardInputSourceChanged` (DistributedNotificationCenter)
-///    Fires immediately whenever the layout changes — including inside a full-screen
-///    app on a separate Space, before any app-switch notification arrives.
-///    This is the primary save path.
-///
-/// 2. `NSWorkspace.didActivateApplicationNotification`
-///    Fires when the frontmost app changes. Used to restore the saved layout
-///    for the newly active app.
-///
-/// Suppression strategy: after a programmatic restore we record the source ID
-/// we set (`pendingRestoreID`). The next TIS notification is suppressed only if
-/// the current layout still matches that value — meaning nothing else overrode
-/// our change. If another app or macOS immediately changed the layout to a
-/// different value, that notification is not suppressed and the new value is
-/// saved as the app's preferred layout.
-///
-/// Space-transition race condition: during a trackpad swipe between Spaces,
-/// macOS changes the input source in one of two orderings relative to the
-/// activation notification:
-///
-/// A. TIS fires while `frontmostApplication` is still the SOURCE app, then
-///    activation fires. The save is deferred by one run-loop pass so that
-///    the activation notification changes `frontmostApplication` first; the
-///    bundle-ID mismatch is detected and the save is discarded.
-///
-/// B. macOS updates `frontmostApplication` to the TARGET app before the
-///    activation notification fires, then TIS fires. `confirmedFrontmostBundleID`
-///    (updated only inside `handleActivation`) still points to the source app,
-///    so the mismatch is detected and the save is discarded immediately.
+/// On every app switch:
+/// 1. **Save** — when an app loses focus, the current input source is stored for it.
+/// 2. **Restore** — when an app gains focus, its saved layout is applied after a
+///    short delay so that any Space-transition animations fully settle before the
+///    layout is switched. If the user leaves before the delay elapses, the restore
+///    is cancelled and no layout is saved for that brief visit.
 @MainActor
 final class AppFocusMonitor {
 
     private let inputSourceManager: any InputSourceManaging
     private let layoutStore: any LayoutStoring
 
+    /// How long to wait after activation before restoring the saved layout.
+    /// Default 100 ms
+    private let restoreDelay: TimeInterval
+
     private var activationObserver: NSObjectProtocol?
-    private var tisObserver: NSObjectProtocol?
+    private var deactivationObserver: NSObjectProtocol?
 
-    /// Source ID set by our last programmatic restore. Cleared after the first
-    /// TIS notification that follows, whether suppressed or not.
-    private var pendingRestoreID: String?
+    /// Pending restore. Cancelled if the user switches away before it fires.
+    private var restoreWorkItem: DispatchWorkItem?
 
-    /// Bundle ID of the last app confirmed via `didActivateApplicationNotification`.
-    /// TIS notifications for a bundle ID that doesn't match this value are
-    /// discarded — they arrived before the activation notification for that app,
-    /// meaning macOS changed `frontmostApplication` during a Space-transition
-    /// animation before we had a chance to restore the correct layout.
-    private var confirmedFrontmostBundleID: String?
+    /// Bundle ID for which a restore is currently queued.
+    private var pendingRestoreBundleID: String?
 
     init(
         inputSourceManager: some InputSourceManaging,
-        layoutStore: some LayoutStoring
+        layoutStore: some LayoutStoring,
+        restoreDelay: TimeInterval = 0.1
     ) {
         self.inputSourceManager = inputSourceManager
         self.layoutStore = layoutStore
+        self.restoreDelay = restoreDelay
     }
 
     // MARK: - Lifecycle
 
     func start() {
-        confirmedFrontmostBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        let frontmost = confirmedFrontmostBundleID
-        log.info("Started. Initial frontmost app: \(frontmost ?? "nil", privacy: .public)")
+        let initial = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        log.info("Started. Frontmost: \(initial ?? "nil", privacy: .public)")
 
-        // 1. Watch for layout changes — save immediately for the current app.
-        tisObserver = DistributedNotificationCenter.default().addObserver(
-            forName: NSNotification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
+        deactivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didDeactivateApplicationNotification,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.handleInputSourceChange()
-            }
+        ) { [weak self] notification in
+            let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                as? NSRunningApplication
+            MainActor.assumeIsolated { self?.handleDeactivation(app) }
         }
 
-        // 2. Watch for app switches — restore the saved layout for the new app.
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            MainActor.assumeIsolated {
-                self?.handleActivation(notification)
-            }
+            let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                as? NSRunningApplication
+            MainActor.assumeIsolated { self?.handleActivation(app) }
         }
     }
 
     func stop() {
+        restoreWorkItem?.cancel()
+        restoreWorkItem = nil
+        pendingRestoreBundleID = nil
+
+        if let o = deactivationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(o)
+        }
         if let o = activationObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(o)
         }
-        if let o = tisObserver {
-            DistributedNotificationCenter.default().removeObserver(o)
-        }
+        deactivationObserver = nil
         activationObserver = nil
-        tisObserver = nil
     }
 
     // MARK: - Private
 
-    /// Called whenever the active input source changes.
-    /// Saves the new layout for the current frontmost app.
-    private func handleInputSourceChange() {
+    /// App lost focus — save its current layout.
+    private func handleDeactivation(_ app: NSRunningApplication?) {
         guard
-            let currentID = inputSourceManager.currentSourceID(),
-            let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+            let bundleID = app?.bundleIdentifier,
             bundleID != Bundle.main.bundleIdentifier
-        else {
-            pendingRestoreID = nil
-            return
-        }
-
-        // Consume the pending restore marker on the first TIS notification
-        // after a restore, regardless of outcome.
-        let pending = pendingRestoreID
-        pendingRestoreID = nil
-
-        // Suppress only if the layout matches what we just set ourselves.
-        // If something else changed it to a different value, save that value.
-        if let pending, currentID == pending {
-            log.debug("Suppressed own restore notification (\(currentID, privacy: .public) in \(bundleID, privacy: .public))")
-            return
-        }
-
-        // Case B guard: discard if macOS updated `frontmostApplication` to this app
-        // before the activation notification fired (the app hasn't been confirmed yet).
-        guard bundleID == confirmedFrontmostBundleID else {
-            log.debug("Discarded early TIS save — activation not yet received for \(bundleID, privacy: .public)")
-            return
-        }
-
-        // Case A guard: defer by one run-loop pass. If a Space-transition TIS fires
-        // while `frontmostApplication` still shows the departing app, the activation
-        // notification will update `frontmostApplication` before this block runs —
-        // the bundle-ID mismatch causes the save to be discarded.
-        let capturedID = currentID
-        let capturedBundleID = bundleID
-        DispatchQueue.main.async { [weak self] in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == capturedBundleID else {
-                    log.debug("Discarded stale TIS save — app changed before save committed (\(capturedBundleID, privacy: .public))")
-                    return
-                }
-                self.layoutStore.setSourceID(capturedID, forBundleID: capturedBundleID)
-            }
-        }
-    }
-
-    /// Called when a different app becomes frontmost.
-    /// Restores the saved layout for the newly active app.
-    private func handleActivation(_ notification: Notification) {
-        guard
-            let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
-                as? NSRunningApplication,
-            let newBundleID = app.bundleIdentifier
         else { return }
 
-        if newBundleID == Bundle.main.bundleIdentifier {
-            log.debug("Skipping self-activation")
+        // User left before the restore timer fired — cancel it and skip saving.
+        // The stored layout from the previous full session is still correct.
+        if pendingRestoreBundleID == bundleID {
+            restoreWorkItem?.cancel()
+            restoreWorkItem = nil
+            pendingRestoreBundleID = nil
+            log.debug("← \(bundleID, privacy: .public) — left before restore fired, save skipped")
             return
         }
 
-        // Confirm the new frontmost app before restoring. Any TIS notification
-        // that fired after macOS updated `frontmostApplication` but before this
-        // point is now valid to process (Case B check above will pass).
-        confirmedFrontmostBundleID = newBundleID
+        guard let currentID = inputSourceManager.currentSourceID() else { return }
+        log.info("← \(bundleID, privacy: .public) — saving: \(currentID, privacy: .public)")
+        layoutStore.setSourceID(currentID, forBundleID: bundleID)
+    }
 
-        if let savedID = layoutStore.sourceID(forBundleID: newBundleID) {
-            log.info("→ \(newBundleID, privacy: .public) — restoring: \(savedID, privacy: .public)")
-            pendingRestoreID = savedID
-            inputSourceManager.selectSource(withID: savedID)
-        } else {
-            log.info("→ \(newBundleID, privacy: .public) — no saved layout, keeping current")
+    /// App gained focus — schedule a layout restore after `restoreDelay`.
+    private func handleActivation(_ app: NSRunningApplication?) {
+        guard
+            let bundleID = app?.bundleIdentifier,
+            bundleID != Bundle.main.bundleIdentifier
+        else { return }
+
+        // Cancel any restore queued for a previous activation.
+        restoreWorkItem?.cancel()
+        restoreWorkItem = nil
+        pendingRestoreBundleID = nil
+
+        guard let savedID = layoutStore.sourceID(forBundleID: bundleID) else {
+            log.info("→ \(bundleID, privacy: .public) — no saved layout")
+            return
         }
+
+        let delayMs = Int(restoreDelay * 1000)
+        log.info("→ \(bundleID, privacy: .public) — will restore \(savedID, privacy: .public) in \(delayMs) ms")
+        pendingRestoreBundleID = bundleID
+
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.restoreWorkItem = nil
+                self.pendingRestoreBundleID = nil
+                log.info("→ \(bundleID, privacy: .public) — restoring: \(savedID, privacy: .public)")
+                self.inputSourceManager.selectSource(withID: savedID)
+            }
+        }
+        restoreWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + restoreDelay, execute: work)
     }
 }

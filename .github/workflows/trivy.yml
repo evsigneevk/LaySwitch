@@ -5,8 +5,7 @@ on:
   pull_request:
     paths:
       - 'LaySwitch/**'
-      - 'LaySwitchTests/**'
-      - 'project.yml'
+      - 'Package.swift'
 
 jobs:
   trivy:
