@@ -1,5 +1,6 @@
 import XCTest
 import AppKit
+import Carbon.HIToolbox
 @testable import LaySwitch
 
 // MARK: - Mocks
