@@ -50,6 +50,11 @@ final class AppFocusMonitor {
     /// TIS notification that follows, whether suppressed or not.
     private var pendingRestoreID: String?
 
+    /// Layout active immediately before a programmatic restore. Lets us
+    /// identify stray Space-transition TIS notifications that carry the
+    /// departing app's layout after handleActivation has already run.
+    private var preRestoreID: String?
+
     /// Bundle ID of the last app confirmed via `didActivateApplicationNotification`.
     /// TIS notifications for a bundle ID that doesn't match this value are
     /// discarded — they arrived before the activation notification for that app,
@@ -117,6 +122,7 @@ final class AppFocusMonitor {
             bundleID != Bundle.main.bundleIdentifier
         else {
             pendingRestoreID = nil
+            preRestoreID = nil
             return
         }
 
@@ -129,8 +135,22 @@ final class AppFocusMonitor {
         // If something else changed it to a different value, save that value.
         if let pending, currentID == pending {
             log.debug("Suppressed own restore notification (\(currentID, privacy: .public) in \(bundleID, privacy: .public))")
+            preRestoreID = nil
             return
         }
+
+        // Stray Space-transition TIS guard: during a Space switch macOS can fire a TIS
+        // notification with the departing app's layout after handleActivation has already
+        // set pendingRestoreID for the arriving app. Detect this by checking whether
+        // the current layout matches what it was just before we called selectSource.
+        // If so, the restore hasn't taken effect yet — suppress and re-arm the marker.
+        if let pre = preRestoreID, currentID == pre, let pending {
+            preRestoreID = nil
+            pendingRestoreID = pending
+            log.debug("Suppressed stray Space-transition TIS (\(currentID, privacy: .public)) — restore still pending for \(bundleID, privacy: .public)")
+            return
+        }
+        preRestoreID = nil
 
         // Case B guard: discard if macOS updated `frontmostApplication` to this app
         // before the activation notification fired (the app hasn't been confirmed yet).
@@ -178,10 +198,12 @@ final class AppFocusMonitor {
 
         if let savedID = layoutStore.sourceID(forBundleID: newBundleID) {
             log.info("→ \(newBundleID, privacy: .public) — restoring: \(savedID, privacy: .public)")
+            preRestoreID = inputSourceManager.currentSourceID()
             pendingRestoreID = savedID
             inputSourceManager.selectSource(withID: savedID)
         } else {
             log.info("→ \(newBundleID, privacy: .public) — no saved layout, keeping current")
+            preRestoreID = nil
         }
     }
 }

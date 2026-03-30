@@ -164,4 +164,54 @@ final class AppFocusMonitorTests: XCTestCase {
         // selectSource should NOT have been called.
         XCTAssertTrue(inputSource.selectedIDs.isEmpty)
     }
+
+    /// Reproduces the Space-transition stray-TIS bug:
+    /// activation fires (pendingRestoreID="US"), then a stray TIS fires while
+    /// the system still reports the old layout ("RussianWin"), then the real
+    /// restore TIS fires ("US"). The stray must be suppressed and must not
+    /// corrupt the stored layout.
+    func test_spaceTransition_strayTIS_doesNotCorruptSavedLayout() async throws {
+        let testBundleID = NSRunningApplication.current.bundleIdentifier ?? ""
+        guard !testBundleID.isEmpty else { return }
+
+        // App has US saved; current system layout is RussianWin (departing app's layout).
+        store.stub("com.apple.keylayout.US", forBundleID: testBundleID)
+        inputSource.stubbedSourceID = "com.apple.keylayout.RussianWin"
+
+        monitor.start()
+
+        // 1. Activation: preRestoreID="RussianWin", pendingRestoreID="US", selectSource("US").
+        NSWorkspace.shared.notificationCenter.post(Notification(
+            name: NSWorkspace.didActivateApplicationNotification,
+            object: NSWorkspace.shared,
+            userInfo: [NSWorkspace.applicationUserInfoKey: NSRunningApplication.current]
+        ))
+        XCTAssertEqual(inputSource.selectedIDs.last, "com.apple.keylayout.US",
+                       "selectSource should have been called with the saved US layout")
+
+        // 2. Stray TIS: OS still reports RussianWin (restore not yet effective).
+        DistributedNotificationCenter.default().post(
+            name: NSNotification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
+            object: nil
+        )
+
+        // 3. Real restore TIS: OS now reflects the selectSource call.
+        inputSource.stubbedSourceID = "com.apple.keylayout.US"
+        DistributedNotificationCenter.default().post(
+            name: NSNotification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
+            object: nil
+        )
+
+        // Drain run loop for any Case-A async dispatch.
+        await Task.yield()
+        try await Task.sleep(nanoseconds: 10_000_000)
+
+        let wrongSave = store.savedPairs.contains {
+            $0.bundleID == testBundleID && $0.sourceID == "com.apple.keylayout.RussianWin"
+        }
+        XCTAssertFalse(wrongSave,
+            "RussianWin must not be saved — it was a stray Space-transition TIS, not user intent")
+        XCTAssertTrue(store.savedPairs.isEmpty,
+            "No save should occur: stray suppressed, real restore TIS suppressed as own-restore confirmation")
+    }
 }
