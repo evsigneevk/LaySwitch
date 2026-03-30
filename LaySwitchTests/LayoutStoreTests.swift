@@ -7,16 +7,14 @@ final class LayoutStoreTests: XCTestCase {
     private var tempURL: URL!
     private var store: LayoutStore!
 
-    override func setUp() async throws {
-        try await super.setUp()
+    override func setUp() {
         tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString + ".json")
         store = LayoutStore(storageURL: tempURL)
     }
 
-    override func tearDown() async throws {
+    override func tearDown() {
         try? FileManager.default.removeItem(at: tempURL)
-        try await super.tearDown()
     }
 
     // MARK: - Tests

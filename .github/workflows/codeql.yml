@@ -6,7 +6,7 @@ on:
     paths:
       - 'LaySwitch/**'
       - 'LaySwitchTests/**'
-      - 'project.yml'
+      - 'Package.swift'
 
 jobs:
   analyze:
@@ -28,21 +28,8 @@ jobs:
         with:
           languages: swift
 
-      - name: Install xcodegen
-        run: brew install --quiet xcodegen
-
-      - name: Generate Xcode project
-        run: xcodegen generate
-
       - name: Build (traced by CodeQL)
-        run: |
-          xcodebuild build \
-            -project LaySwitch.xcodeproj \
-            -scheme LaySwitch \
-            -destination 'platform=macOS,arch=arm64' \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+        run: swift build
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v4
