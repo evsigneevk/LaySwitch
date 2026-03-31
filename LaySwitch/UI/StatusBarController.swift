@@ -19,10 +19,13 @@ final class StatusBarController: NSObject {
         super.init()
 
         if let button = statusItem.button {
-            // Use "LS" text as the menu bar icon instead of an SF Symbol.
-            button.image = nil
-            button.title = "LS"
-            button.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold)
+            if let image = NSImage(named: "StatusBarIcon") {
+                image.isTemplate = true
+                button.image = image
+            } else {
+                button.title = "LS"
+                button.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold)
+            }
         }
 
         let menu = NSMenu()

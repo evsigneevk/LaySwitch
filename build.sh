@@ -5,8 +5,10 @@ APP_NAME="LaySwitch"
 BUNDLE_ID="com.layswitch.app"
 SDK=$(xcrun --show-sdk-path --sdk macosx)
 ARCH=$(uname -m)   # arm64 on Apple Silicon, x86_64 on Intel
-ICON_SRC="Assets/LaySwitch.jpeg"
-ICON_ICNS="Assets/LaySwitch.icns"
+ICON_SRC="Assets/AppIcon.png"
+ICON_ICNS="Assets/AppIcon.icns"
+STATUSBAR_ICON_1X="Assets/StatusBarIcon_18.png"
+STATUSBAR_ICON_2X="Assets/StatusBarIcon_36.png"
 
 SOURCES=(
     LaySwitch/App/AppDelegate.swift
@@ -20,6 +22,7 @@ SOURCES=(
 # ── Icon ──────────────────────────────────────────────────────────────────────
 
 echo "→ Building icon..."
+rm -rf "${ICON_ICNS}"
 ICONSET=$(mktemp -d)/AppIcon.iconset
 mkdir -p "$ICONSET"
 
@@ -56,6 +59,8 @@ swiftc \
 
 echo "→ Copying resources..."
 cp "$ICON_ICNS" "${APP_NAME}.app/Contents/Resources/AppIcon.icns"
+cp "$STATUSBAR_ICON_1X" "${APP_NAME}.app/Contents/Resources/StatusBarIcon.png"
+cp "$STATUSBAR_ICON_2X" "${APP_NAME}.app/Contents/Resources/StatusBarIcon@2x.png"
 
 echo "→ Writing Info.plist..."
 cat > "${APP_NAME}.app/Contents/Info.plist" <<PLIST
@@ -74,7 +79,7 @@ cat > "${APP_NAME}.app/Contents/Info.plist" <<PLIST
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>1.1.0</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>

@@ -19,6 +19,8 @@ install:
 	fi
 	@echo "→ Installing $(APP).app to $(INSTALL_DIR)..."
 	cp -r "$(APP).app" "$(INSTALL_DIR)/"
+	@/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
+		-f "$(INSTALL_DIR)/$(APP).app"
 	@echo "→ Launching $(APP)..."
 	open "$(INSTALL_DIR)/$(APP).app"
 
