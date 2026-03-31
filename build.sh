@@ -92,5 +92,4 @@ codesign --force --deep --sign - "${APP_NAME}.app"
 
 echo "✓ Built ${APP_NAME}.app"
 echo ""
-echo "To run:     open ${APP_NAME}.app"
-echo "To install: cp -r ${APP_NAME}.app /Applications/"
+echo "To install: make install"
