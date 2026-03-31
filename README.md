@@ -4,8 +4,7 @@
 [![macOS 15+](https://img.shields.io/badge/macOS-15%2B-brightgreen)](https://www.apple.com/macos/)
 [![Swift 6](https://img.shields.io/badge/Swift-6.0-orange)](https://www.swift.org)
 
-A lightweight macOS menu bar utility that automatically remembers and restores the keyboard input source (layout) for each application. When you switch to an app, LaySwitch instantly restores the layout you were using there last — no manual switching required.
-
+A lightweight macOS menu bar utility that automatically remembers and restores the keyboard input source (layout) for each application. When you switch to an app, LaySwitch restores the layout you were using there last — no manual switching required.
 
 ---
 
@@ -13,7 +12,8 @@ A lightweight macOS menu bar utility that automatically remembers and restores t
 
 - Runs silently in the menu bar — no Dock icon, no windows
 - Remembers one layout per application
-- Restores layout instantly on app focus
+- Restores layout on app focus
+- Works correctly with fullscreen apps on separate Spaces
 - Optional launch at login
 - Stores mappings in `~/Library/Application Support/LaySwitch/layouts.json`
 
@@ -41,25 +41,27 @@ git clone git@github.com:evsigneevk/LaySwitch.git
 cd LaySwitch
 ```
 
-**3. Build:**
+**3. Build and install:**
 
 ```bash
-bash build.sh
+make install
 ```
 
-This compiles the Swift sources and produces `LaySwitch.app` in the project root.
-
-**4. Install:**
-
-```bash
-cp -r LaySwitch.app /Applications/
-open /Applications/LaySwitch.app
-```
+This compiles the sources, stops any running instance, copies `LaySwitch.app` to `/Applications`, and launches it.
 
 The app appears as **LS** in your menu bar. That's it — it starts working immediately.
 
 > **First launch / Gatekeeper:** If macOS shows a warning that the app cannot be opened, go to
 > **System Settings → Privacy & Security** and click **Open Anyway**.
+
+## Make targets
+
+| Command | Description |
+|---|---|
+| `make install` | Compile `LaySwitch.app` → Stop running instance → copy to `/Applications` → launch |
+| `make build` | Compile `LaySwitch.app` in the project root (no install) |
+| `make uninstall` | Stop → remove login item → delete app and saved layouts |
+| `make logs` | Stream live logs from the running app |
 
 ## Launch at Login
 
@@ -69,23 +71,21 @@ This writes a LaunchAgent plist to `~/Library/LaunchAgents/com.layswitch.app.pli
 ## Uninstall
 
 ```bash
-# Remove the app
-rm -rf /Applications/LaySwitch.app
-
-# Remove launch at login entry (if enabled)
-launchctl bootout "gui/$(id -u)/com.layswitch.app" 2>/dev/null || true
-rm -f ~/Library/LaunchAgents/com.layswitch.app.plist
-
-# Remove saved layout mappings
-rm -rf ~/Library/Application\ Support/LaySwitch
+make uninstall
 ```
+
+Stops the app, removes the login item if enabled, deletes `/Applications/LaySwitch.app`, and removes saved layout mappings.
 
 ## How It Works
 
-LaySwitch listens for `NSWorkspace.didActivateApplicationNotification`. On every app switch:
+LaySwitch listens for two `NSWorkspace` notifications:
 
-1. **Save** — reads the current input source and stores it under the previous app's bundle ID.
-2. **Restore** — looks up the newly active app's bundle ID and switches to its saved layout.
+1. **`didDeactivateApplication`** — when an app loses focus, the current input source is saved for it.
+2. **`didActivateApplication`** — when an app gains focus, its saved layout is restored after a short delay (100 ms by default).
+
+The delay lets Space-transition animations fully complete before the layout switch is applied, which prevents interference from transient system layout events during the animation.
+
+If the user switches away before the delay elapses, the pending restore is cancelled and no layout is saved for that brief visit.
 
 Input source switching uses the Carbon **Text Input Services** (TIS) API — the only public API on macOS for programmatic keyboard layout switching.
 
@@ -94,12 +94,12 @@ Input source switching uses the Carbon **Text Input Services** (TIS) API — the
 ```
 LaySwitch/
 ├── App/
-│   ├── AppDelegate.swift       # @main entry point, owns all components
-│   └── Info.plist              # LSUIElement = YES (no Dock icon)
+│   ├── AppDelegate.swift         # @main entry point, owns all components
+│   └── Info.plist                # LSUIElement = YES (no Dock icon)
 ├── InputSource/
 │   └── InputSourceManager.swift  # TIS API wrapper
 ├── Focus/
-│   └── AppFocusMonitor.swift     # NSWorkspace notification observer
+│   └── AppFocusMonitor.swift     # save on deactivation, restore on activation
 ├── Storage/
 │   └── LayoutStore.swift         # JSON persistence
 ├── LoginItem/
@@ -110,28 +110,20 @@ LaySwitch/
 Assets/
 └── LaySwitch.jpeg   # source image — icns is generated at build time
 
-Package.swift        # Swift Package Manager manifest (tests)
-build.sh             # build script — produces LaySwitch.app (no Xcode required)
+Makefile             # build / install / logs
+build.sh             # build script invoked by make build
+Package.swift        # Swift Package Manager manifest
 ```
 
 ## Debugging
 
-Layout switching is logged via `os_log`. View live in **Console.app** — filter by
-subsystem `com.layswitch.app`.
-
-Or from the terminal:
-
 ```bash
-log stream --predicate 'subsystem == "com.layswitch.app"' --level info
+make logs
 ```
+
+Or filter by subsystem in **Console.app**: `com.layswitch.app`.
 
 Current saved mappings:
-
-```bash
-cat ~/Library/Application\ Support/LaySwitch/layouts.json | python3 -m json.tool
-```
-
-With `jq`:
 
 ```bash
 jq . ~/Library/Application\ Support/LaySwitch/layouts.json
